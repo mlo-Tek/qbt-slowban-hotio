@@ -168,12 +168,6 @@ The template included in this repository intentionally contains only generic exa
 
 See [`SECURITY.md`](SECURITY.md) for additional notes.
 
-## AI disclosure
-
-This project, including portions of the Python implementation, Unraid template, and documentation, was created with substantial assistance from **OpenAI ChatGPT** and subsequently reviewed and adapted for the intended setup.
-
-AI-generated or AI-assisted code can contain defects. Review the code and test it in your own environment before relying on it.
-
 ## Disclaimer
 
 Use at your own risk. Banning peers and manipulating the qBittorrent manual ban list can affect active transfers and connectivity. Test with `SLOWBAN_DRY_RUN=true` first if you want to verify behavior without applying real bans.
