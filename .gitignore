@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Runtime state and logs
+state/
+logs/
+*.log
+slowban_state.json
+
+# Secrets / local overrides
+.env
+.env.*
+*.local.xml
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/

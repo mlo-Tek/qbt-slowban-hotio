@@ -1,0 +1,47 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Container version="2">
+  <Name>qbt-slowban</Name>
+  <Repository>python:3.12-alpine</Repository>
+  <Registry>https://hub.docker.com/_/python</Registry>
+  <Network>bridge</Network>
+  <MyIP />
+  <Shell />
+  <Privileged>false</Privileged>
+  <Support>https://github.com/TechClusterHQ/qbt-slowban</Support>
+  <Project>https://github.com/TechClusterHQ/qbt-slowban</Project>
+  <ReadMe />
+  <Overview>Sidecar helper for hotio/qbittorrent. Warns after 45 seconds below the minimum upload-speed threshold, bans after 90 seconds, clears the manual ban list every 12 hours, writes 2-hour logs with 7 days retention, and emits a 10-minute summary.</Overview>
+  <Category>Downloaders:</Category>
+  <WebUI />
+  <TemplateURL />
+  <Icon />
+  <ExtraParams>--pids-limit 2048</ExtraParams>
+  <PostArgs>sh -c "pip install --disable-pip-version-check --no-cache-dir requests &amp;&amp; python /app/slowban.py"</PostArgs>
+  <CPUset />
+  <DateInstalled>1775322980</DateInstalled>
+  <DonateText />
+  <DonateLink />
+  <Requires />
+  <Config Name="App Script" Target="/app/slowban.py" Default="/mnt/cache/appdata/qbt-slowban/slowban.py" Mode="ro" Description="Path to slowban.py on Unraid" Type="Path" Display="always" Required="true" Mask="false">/mnt/cache/appdata/qbt-slowban/slowban.py</Config>
+  <Config Name="State Directory" Target="/state" Default="/mnt/cache/appdata/qbt-slowban/state" Mode="rw" Description="Persistent state directory" Type="Path" Display="always" Required="true" Mask="false">/mnt/cache/appdata/qbt-slowban/state</Config>
+  <Config Name="Log Directory" Target="/logs" Default="/mnt/cache/appdata/qbt-slowban/logs" Mode="rw" Description="Directory for 2-hour log files" Type="Path" Display="always" Required="true" Mask="false">/mnt/cache/appdata/qbt-slowban/logs</Config>
+  <Config Name="QBT_URL" Target="QBT_URL" Default="http://192.168.1.100:8080" Mode="" Description="qBittorrent WebUI URL. Change this to your qBittorrent address." Type="Variable" Display="always" Required="true" Mask="false">http://192.168.1.100:8080</Config>
+  <Config Name="QBT_USERNAME" Target="QBT_USERNAME" Default="" Mode="" Description="qBittorrent username" Type="Variable" Display="always" Required="true" Mask="false" />
+  <Config Name="QBT_PASSWORD" Target="QBT_PASSWORD" Default="" Mode="" Description="qBittorrent password" Type="Variable" Display="always" Required="true" Mask="true" />
+  <Config Name="SLOWBAN_THRESHOLD_TIME" Target="SLOWBAN_THRESHOLD_TIME" Default="90" Mode="" Description="Seconds a peer may stay below the minimum speed before ban" Type="Variable" Display="always" Required="true" Mask="false">90</Config>
+  <Config Name="SLOWBAN_WARN_TIME" Target="SLOWBAN_WARN_TIME" Default="45" Mode="" Description="Seconds below threshold before logging a warning" Type="Variable" Display="always" Required="true" Mask="false">45</Config>
+  <Config Name="SLOWBAN_MIN_SPEED" Target="SLOWBAN_MIN_SPEED" Default="50768" Mode="" Description="Minimum upload speed in bytes per second" Type="Variable" Display="always" Required="true" Mask="false">50768</Config>
+  <Config Name="SLOWBAN_POLL_INTERVAL" Target="SLOWBAN_POLL_INTERVAL" Default="10" Mode="" Description="Polling interval in seconds" Type="Variable" Display="always" Required="true" Mask="false">10</Config>
+  <Config Name="SLOWBAN_SUMMARY_INTERVAL" Target="SLOWBAN_SUMMARY_INTERVAL" Default="600" Mode="" Description="Summary log interval in seconds" Type="Variable" Display="always" Required="true" Mask="false">600</Config>
+  <Config Name="SLOWBAN_CLEAR_PERIODICALLY" Target="SLOWBAN_CLEAR_PERIODICALLY" Default="0 */12 * * *" Mode="" Description="Cron schedule to clear all manual bans every 12 hours" Type="Variable" Display="always" Required="false" Mask="false">0 */12 * * *</Config>
+  <Config Name="SLOWBAN_BANNED_PEERS" Target="SLOWBAN_BANNED_PEERS" Default="" Mode="" Description="Comma-separated peers to keep permanently banned" Type="Variable" Display="always" Required="false" Mask="false" />
+  <Config Name="SLOWBAN_LOG_LEVEL" Target="SLOWBAN_LOG_LEVEL" Default="INFO" Mode="" Description="Log level: DEBUG, INFO, WARN, BAN, UNBAN, ERROR" Type="Variable" Display="advanced" Required="false" Mask="false">INFO</Config>
+  <Config Name="SLOWBAN_DRY_RUN" Target="SLOWBAN_DRY_RUN" Default="false" Mode="" Description="If true, only simulate bans and ban-list changes" Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+  <Config Name="SLOWBAN_STATE_FILE" Target="SLOWBAN_STATE_FILE" Default="/state/slowban_state.json" Mode="" Description="Path to persistent state file inside container" Type="Variable" Display="advanced" Required="false" Mask="false">/state/slowban_state.json</Config>
+  <Config Name="SLOWBAN_LOG_DIR" Target="SLOWBAN_LOG_DIR" Default="/logs" Mode="" Description="In-container log directory" Type="Variable" Display="advanced" Required="false" Mask="false">/logs</Config>
+  <Config Name="SLOWBAN_LOG_RETENTION_DAYS" Target="SLOWBAN_LOG_RETENTION_DAYS" Default="7" Mode="" Description="Delete 2-hour log files older than this many days" Type="Variable" Display="advanced" Required="false" Mask="false">7</Config>
+  <Config Name="SLOWBAN_LOG_UNBAN_DETAILS" Target="SLOWBAN_LOG_UNBAN_DETAILS" Default="false" Mode="" Description="If true, log each individual peer unbanned during scheduled clears" Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+  <Config Name="SLOWBAN_COLOR_LOGS" Target="SLOWBAN_COLOR_LOGS" Default="true" Mode="" Description="Enable colored console log output" Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
+  <Config Name="TZ" Target="TZ" Default="Europe/Berlin" Mode="" Description="Timezone" Type="Variable" Display="advanced" Required="false" Mask="false">Europe/Berlin</Config>
+  <TailscaleStateDir />
+</Container>

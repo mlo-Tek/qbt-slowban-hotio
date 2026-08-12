@@ -1,67 +1,135 @@
-# qbt-slowban
+# qbt-slowban for hotio/qbittorrent on Unraid
 
-Docker mod for the [linuxserver.io qbittorrent container](https://docs.linuxserver.io/images/docker-qbittorrent) that automatically bans peers who are leeching off of you slowly over a period of time. Banning slow leechers can help increase your HDD's lifespan and reduce the load put on it as random reads (which happen when someone leeches different parts of the file from you) are reduced.
+A lightweight Python sidecar for **hotio/qbittorrent** on **Unraid**.
 
-## Considerations before using
+It connects to the qBittorrent Web API, watches peers that are downloading from you below a configured upload-speed threshold, warns after a configured amount of time, and bans peers that remain below the threshold for too long.
 
-- Check if your tracker forbids banning too many peers
-- Banning too many peers might result in you unable to download some files if the only seeders have been banned. Additionally, if the speed at which you could upload to them changes after they're banned, you won't know and keep them banned
+## Features
 
-In general, use this script at your own risk and carefully think about what might happen if you use it.
+- Designed as a separate sidecar container for hotio/qbittorrent
+- Uses the qBittorrent Web API
+- Tracks slow peers per torrent
+- Warning before a ban is applied
+- Persistent state across container restarts
+- Scheduled clearing of the qBittorrent manual ban list
+- Optional permanent bans that survive scheduled clears
+- Dry-run mode
+- 2-hour rotating log files
+- Configurable log retention
+- Periodic status summaries
+- Colored console output
 
-## Installation
+## Default settings
 
-First, enable the option "Bypass authentication for clients on localhost" in the qBittorrent settings under the "Web UI" tab
+| Setting | Default |
+|---|---:|
+| Warning after | 45 seconds |
+| Ban after | 90 seconds |
+| Minimum upload speed | 50,768 B/s |
+| Poll interval | 10 seconds |
+| Summary interval | 600 seconds |
+| Clear manual bans | Every 12 hours |
+| Log retention | 7 days |
+| Dry run | false |
 
-Add the following environment variables to your qBittorrent container:
-- `WEBUI_PORT=8080`: If it doesn't exist already and you changed the port from the default 8080
-- `DOCKER_MODS=ghcr.io/techclusterhq/qbt-slowban:main`
-- `SLOWBAN_THRESHOLD_TIME=180`: In seconds
-- `SLOWBAN_MIN_SPEED=`: If a peer downloads from you slower than this speed for the specified timeframe, they will be banned (in B/s)
-- `SLOWBAN_POLL_INTERVAL=10`: How often to check the peer stats. The default value should be fine
+The minimum upload-speed value is expressed in **bytes per second**.
 
-> [!NOTE]  
-> If you are already using another docker mod with your qBittorrent container you have to combine both into one DOCKER_MODS variable, seperated by a pipe:
-> ```yaml
-> DOCKER_MODS=ghcr.io/techclusterhq/qbt-slowban:main|ghcr.io/techclusterhq/qbt-portchecker:main
-> ```
+## Repository layout
 
-Start the stack again and check if the script starts banning slow peers. Feel free to open a [GitHub issue](https://github.com/TechClusterHQ/qbt-slowban/issues) or DM me on Discord (username `tech_cluster`).
-
-## Unbanning peers automatically on a schedule
-
-This helps making sure that false positives don't cause much harm because all banned peers are unbanned frequently.\
-Note: This will unban all peers, including those not banned by qbt-slowban. Refer to the option below to specify peers that should be banned permanently.
-
-Make sure to have set the TZ environment variable to your timezone, refer to [this list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List) for possible values.
-
-You need a cron schedule that specifies when all peers should be unbanned, https://crontab.guru is a useful tool for this.\
-Common examples ([more](https://crontab.guru/examples.html)):
-- `0 12 * * *` run at noon every day (recommended)
-- `0 12 * * 1` run at noon only on mondays
-- `0 12 1 * *` run at noon on the first day of the month
-
-Set it as an environment variable:
-```yaml
-SLOWBAN_CLEAR_PERIODICALLY=0 12 * * *
+```text
+qbt-slowban-hotio/
+├── slowban.py
+├── my-qbt-slowban.xml
+├── README.md
+└── .gitignore
 ```
 
-If you want specific peers to be permanently banned, even when the list is cleared, you can specify them using the following environment variable (comma-seperated, no spaces inbetween):
-```yaml
-SLOWBAN_BANNED_PEERS=1.1.1.1,8.8.8.8
+## Unraid installation
+
+1. Create an appdata directory:
+
+   ```bash
+   mkdir -p /mnt/cache/appdata/qbt-slowban/{state,logs}
+   ```
+
+2. Copy `slowban.py` to:
+
+   ```text
+   /mnt/cache/appdata/qbt-slowban/slowban.py
+   ```
+
+3. Copy `my-qbt-slowban.xml` to your Unraid user-template directory:
+
+   ```text
+   /boot/config/plugins/dockerMan/templates-user/my-qbt-slowban.xml
+   ```
+
+4. In the Unraid Docker page, choose **Add Container** and select the `qbt-slowban` template.
+
+5. Set at minimum:
+
+   - `QBT_URL`
+   - `QBT_USERNAME`
+   - `QBT_PASSWORD`
+
+6. Adjust the Docker network if needed. The public template uses `bridge` by default because custom VLAN names and fixed IP addresses are installation-specific.
+
+7. Start the container and inspect its log.
+
+## Important configuration variables
+
+### qBittorrent
+
+- `QBT_URL` — qBittorrent WebUI/API URL
+- `QBT_USERNAME` — qBittorrent username
+- `QBT_PASSWORD` — qBittorrent password
+
+### Slow-peer detection
+
+- `SLOWBAN_MIN_SPEED` — minimum upload speed in bytes per second
+- `SLOWBAN_WARN_TIME` — seconds below the threshold before a warning is logged
+- `SLOWBAN_THRESHOLD_TIME` — seconds below the threshold before the peer is banned
+- `SLOWBAN_POLL_INTERVAL` — polling interval in seconds
+
+`SLOWBAN_WARN_TIME` must be lower than `SLOWBAN_THRESHOLD_TIME`.
+
+### Scheduled unban
+
+`SLOWBAN_CLEAR_PERIODICALLY` accepts a 5-field cron expression.
+
+Default:
+
+```text
+0 */12 * * *
 ```
 
-> [!NOTE]  
-> If it looks like the banlist has not been modified properly in the web ui, chances are it's just a caching issue.
-> Force-reloading the page by using Shift+F5 (with most browsers) should fix this issue.
+This runs at 00:00 and 12:00 according to the configured container timezone.
 
+`SLOWBAN_BANNED_PEERS` can contain comma-separated peers that should be kept permanently banned when the scheduled clear runs.
 
-## Unbanning peers manually
+### Logging
 
-In the qBittorrent Web Interface, edit the IPs in the "Manually banned IP addresses" textbox in the "Connection" tab.
+- `SLOWBAN_LOG_LEVEL`
+- `SLOWBAN_LOG_DIR`
+- `SLOWBAN_LOG_RETENTION_DAYS`
+- `SLOWBAN_LOG_UNBAN_DETAILS`
+- `SLOWBAN_COLOR_LOGS`
+- `SLOWBAN_SUMMARY_INTERVAL`
 
-## Debugging
+Log files are split into 2-hour time slots.
 
-Debug/testing variables:
-- `SLOWBAN_LOG_LEVEL=DEBUG`: Show all logs
-- `SLOWBAN_STUB_REQUESTS=true`: Don't ban anyone but rather log a message when someone is under the threshold (requires loglevel debug)
+## Security
+
+Do **not** commit a populated Unraid XML template containing your real qBittorrent username, password, internal IP addresses, or other private configuration.
+
+The template included in this repository intentionally contains only generic example values for qBittorrent connectivity.
+
+## AI disclosure
+
+This project, including portions of the Python implementation, Unraid template, and documentation, was created with substantial assistance from **OpenAI ChatGPT** and subsequently reviewed and adapted for the intended setup.
+
+AI-generated or AI-assisted code can contain defects. Review the code and test it in your own environment before relying on it.
+
+## Disclaimer
+
+Use at your own risk. Banning peers and manipulating the qBittorrent manual ban list can affect active transfers and connectivity. Test with `SLOWBAN_DRY_RUN=true` first if you want to verify behavior without applying real bans.
