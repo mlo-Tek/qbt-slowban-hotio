@@ -207,14 +207,28 @@ def login() -> None:
             f"Login failed: HTTP {response.status_code}: {response.text}"
         )
 
-    if not session.cookies:
+    result = response.text.strip().lower()
+    has_session_cookie = bool(session.cookies)
+
+    # qBittorrent versions differ here:
+    # - older versions commonly return HTTP 200 + "Ok."
+    # - newer versions can return HTTP 204 with an empty body + session cookie
+    # - auth-bypass setups may also use an empty successful response
+    if result and result not in ("ok.", "ok") and not has_session_cookie:
         raise RuntimeError(
-            "Login failed: qBittorrent returned no session cookie"
+            f"Login failed: unexpected response HTTP {response.status_code}: {response.text}"
+        )
+
+    # Verify that the session can actually access the qBittorrent Web API.
+    probe = session.get(f"{QBT_URL}/api/v2/app/version", timeout=15)
+    if not (200 <= probe.status_code < 300):
+        raise RuntimeError(
+            f"Login verification failed: HTTP {probe.status_code}: {probe.text}"
         )
 
     log(
         f"Logged into qBittorrent at {QBT_URL} "
-        f"(HTTP {response.status_code}, session cookie received)",
+        f"(HTTP {response.status_code}, session_verified=yes)",
         "INFO",
     )
 
