@@ -201,11 +201,22 @@ def login() -> None:
         data={"username": QBT_USERNAME, "password": QBT_PASSWORD},
         timeout=15,
     )
-    response.raise_for_status()
-    result = response.text.strip().lower()
-    if result not in ("ok.", "ok"):
-        raise RuntimeError(f"Login failed: {response.text}")
-    log(f"Logged into qBittorrent at {QBT_URL}", "INFO")
+
+    if not (200 <= response.status_code < 300):
+        raise RuntimeError(
+            f"Login failed: HTTP {response.status_code}: {response.text}"
+        )
+
+    if not session.cookies:
+        raise RuntimeError(
+            "Login failed: qBittorrent returned no session cookie"
+        )
+
+    log(
+        f"Logged into qBittorrent at {QBT_URL} "
+        f"(HTTP {response.status_code}, session cookie received)",
+        "INFO",
+    )
 
 
 def get_torrents() -> List[Dict[str, Any]]:
