@@ -1,8 +1,15 @@
 # qbt-slowban for hotio/qbittorrent on Unraid
 
+> [!WARNING]
+> ⚠️ **AI-assisted project**
+>
+> This project, including portions of the Python implementation, Unraid template, and documentation, was created with substantial assistance from **OpenAI ChatGPT** and subsequently reviewed and adapted for the intended setup.
+>
+> AI-generated or AI-assisted code can contain defects. Review the code and test it in your own environment before relying on it.
+
 A lightweight Python sidecar for **hotio/qbittorrent** on **Unraid**.
 
-It connects to the qBittorrent Web API, watches peers that are downloading from you below a configured upload-speed threshold, warns after a configured amount of time, and bans peers that remain below the threshold for too long.
+This repository is a fork of [`TechClusterHQ/qbt-slowban`](https://github.com/TechClusterHQ/qbt-slowban), adapted from the original LinuxServer.io Docker Mod approach to run as a standalone sidecar container for hotio/qbittorrent.
 
 ## Features
 
@@ -41,12 +48,47 @@ qbt-slowban-hotio/
 ├── slowban.py
 ├── my-qbt-slowban.xml
 ├── README.md
+├── SECURITY.md
 └── .gitignore
 ```
 
 ## Unraid installation
 
-1. Create an appdata directory:
+### Option 1: Download directly from GitHub
+
+Create the appdata directories:
+
+```bash
+mkdir -p /mnt/cache/appdata/qbt-slowban/{state,logs}
+```
+
+Download the Python script directly into the appdata directory:
+
+```bash
+curl -L   https://raw.githubusercontent.com/mlo-Tek/qbt-slowban-hotio/main/slowban.py   -o /mnt/cache/appdata/qbt-slowban/slowban.py
+```
+
+Download the Unraid template directly into the user-template directory:
+
+```bash
+curl -L   https://raw.githubusercontent.com/mlo-Tek/qbt-slowban-hotio/main/my-qbt-slowban.xml   -o /boot/config/plugins/dockerMan/templates-user/my-qbt-slowban.xml
+```
+
+Then open the Unraid Docker page, choose **Add Container**, and select the `qbt-slowban` template.
+
+Set at minimum:
+
+- `QBT_URL`
+- `QBT_USERNAME`
+- `QBT_PASSWORD`
+
+Adjust the Docker network if needed. The public template uses `bridge` by default because custom VLAN names and fixed IP addresses are installation-specific.
+
+Start the container and inspect its log.
+
+### Option 2: Manual installation
+
+1. Create the appdata directories:
 
    ```bash
    mkdir -p /mnt/cache/appdata/qbt-slowban/{state,logs}
@@ -58,7 +100,7 @@ qbt-slowban-hotio/
    /mnt/cache/appdata/qbt-slowban/slowban.py
    ```
 
-3. Copy `my-qbt-slowban.xml` to your Unraid user-template directory:
+3. Copy `my-qbt-slowban.xml` to:
 
    ```text
    /boot/config/plugins/dockerMan/templates-user/my-qbt-slowban.xml
@@ -72,7 +114,7 @@ qbt-slowban-hotio/
    - `QBT_USERNAME`
    - `QBT_PASSWORD`
 
-6. Adjust the Docker network if needed. The public template uses `bridge` by default because custom VLAN names and fixed IP addresses are installation-specific.
+6. Adjust the Docker network if needed.
 
 7. Start the container and inspect its log.
 
@@ -123,6 +165,8 @@ Log files are split into 2-hour time slots.
 Do **not** commit a populated Unraid XML template containing your real qBittorrent username, password, internal IP addresses, or other private configuration.
 
 The template included in this repository intentionally contains only generic example values for qBittorrent connectivity.
+
+See [`SECURITY.md`](SECURITY.md) for additional notes.
 
 ## AI disclosure
 
