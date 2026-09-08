@@ -46,6 +46,7 @@ The minimum upload-speed value is expressed in **bytes per second**.
 ```text
 qbt-slowban-hotio/
 ├── slowban.py
+├── test_slowban.py
 ├── my-qbt-slowban.xml
 ├── README.md
 ├── SECURITY.md
@@ -125,6 +126,9 @@ Start the container and inspect its log.
 - `QBT_URL` — qBittorrent WebUI/API URL
 - `QBT_USERNAME` — qBittorrent username
 - `QBT_PASSWORD` — qBittorrent password
+- `QBT_API_KEY` — a qBittorrent 5.1+ Web API key, used instead of the username and password
+
+When `QBT_API_KEY` is set, every request carries an `Authorization: Bearer` header and no login call is made, so `QBT_USERNAME` and `QBT_PASSWORD` may stay empty. A deployment that manages credentials centrally can hand the container a scoped key rather than the account password.
 
 ### Slow-peer detection
 
@@ -134,6 +138,15 @@ Start the container and inspect its log.
 - `SLOWBAN_POLL_INTERVAL` — polling interval in seconds
 
 `SLOWBAN_WARN_TIME` must be lower than `SLOWBAN_THRESHOLD_TIME`.
+
+### Scope and ceiling
+
+These four are off by default, so an existing deployment behaves exactly as before after an upgrade.
+
+- `SLOWBAN_ONLY_FINISHED_TORRENTS` — `true` scans only torrents that have finished downloading. While a torrent is still downloading, a peer's upload speed towards us says more about our own progress than about the peer.
+- `SLOWBAN_SKIP_COMPLETE_PEERS` — `true` ignores peers that already hold the whole payload. Such a peer never leeches from us, so a low upload speed towards it is expected rather than evidence.
+- `SLOWBAN_INCLUDE_IDLE_PEERS` — `true` also tracks peers at exactly 0 B/s. Without it a connection that holds a slot and takes nothing at all is the one case the speed floor cannot catch.
+- `SLOWBAN_MAX_BANS_PER_POLL` — ceiling on the bans a single poll may apply, `0` for unlimited. A peer held back by the ceiling keeps its streak and is banned on one of the next polls rather than starting its threshold window again.
 
 ### Scheduled unban
 
