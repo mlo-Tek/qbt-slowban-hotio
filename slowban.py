@@ -12,12 +12,36 @@ import requests
 QBT_URL = os.environ.get("QBT_URL", "http://10.20.20.15:8080").rstrip("/")
 QBT_USERNAME = os.environ.get("QBT_USERNAME", "")
 QBT_PASSWORD = os.environ.get("QBT_PASSWORD", "")
+# A qBittorrent 5.1+ Web API key. When set, it replaces the username and
+# password login: every request carries a bearer header instead of a session
+# cookie. Deployments that manage credentials centrally can hand this helper
+# a scoped key rather than the account password.
+QBT_API_KEY = os.environ.get("QBT_API_KEY", "").strip()
 
 SLOWBAN_THRESHOLD_TIME = int(os.environ.get("SLOWBAN_THRESHOLD_TIME", "180"))
 SLOWBAN_WARN_TIME = int(os.environ.get("SLOWBAN_WARN_TIME", "90"))
 SLOWBAN_MIN_SPEED = int(os.environ.get("SLOWBAN_MIN_SPEED", "50768"))
 SLOWBAN_POLL_INTERVAL = int(os.environ.get("SLOWBAN_POLL_INTERVAL", "10"))
 SLOWBAN_SUMMARY_INTERVAL = int(os.environ.get("SLOWBAN_SUMMARY_INTERVAL", "600"))
+# Ceiling on the bans a single poll may apply. 0 keeps the current behaviour
+# of banning every peer that is over its threshold in the same pass; a small
+# number bounds what a misjudged speed floor can do to a swarm at once.
+SLOWBAN_MAX_BANS_PER_POLL = int(os.environ.get("SLOWBAN_MAX_BANS_PER_POLL", "0"))
+
+# Scope switches. All three default to the behaviour this helper has always
+# had, so an existing deployment is unaffected by the upgrade.
+#
+# While a torrent is still downloading, a peer's upload speed towards us says
+# more about our own progress than about the peer, so a deployment that only
+# wants to police what it seeds can restrict the scan to finished torrents.
+SLOWBAN_ONLY_FINISHED_TORRENTS = os.environ.get("SLOWBAN_ONLY_FINISHED_TORRENTS", "false").lower() == "true"
+# A peer that already holds the whole payload never leeches from us, so a low
+# upload speed towards it is expected rather than evidence.
+SLOWBAN_SKIP_COMPLETE_PEERS = os.environ.get("SLOWBAN_SKIP_COMPLETE_PEERS", "false").lower() == "true"
+# A peer at exactly 0 B/s is currently never tracked, so a connection that
+# holds a slot and takes nothing at all is the one case a speed floor cannot
+# catch. Enable this to treat it like any other peer below the floor.
+SLOWBAN_INCLUDE_IDLE_PEERS = os.environ.get("SLOWBAN_INCLUDE_IDLE_PEERS", "false").lower() == "true"
 
 SLOWBAN_LOG_LEVEL = os.environ.get("SLOWBAN_LOG_LEVEL", "INFO").upper()
 SLOWBAN_DRY_RUN = os.environ.get("SLOWBAN_DRY_RUN", "false").lower() == "true"
@@ -64,6 +88,8 @@ STATE_META_KEYS = {
 
 session = requests.Session()
 session.headers.update({"Referer": QBT_URL})
+if QBT_API_KEY:
+    session.headers.update({"Authorization": f"Bearer {QBT_API_KEY}"})
 
 CURRENT_LOG_PATH: Path | None = None
 CURRENT_LOG_SLOT: str | None = None
@@ -196,6 +222,17 @@ def save_state(state: Dict[str, Any]) -> None:
 
 
 def login() -> None:
+    # An API key authenticates every request on its own, so there is no login
+    # call to make - only the same reachability probe the password path ends on.
+    if QBT_API_KEY:
+        probe = session.get(f"{QBT_URL}/api/v2/app/version", timeout=15)
+        if not (200 <= probe.status_code < 300):
+            raise RuntimeError(
+                f"API key rejected: HTTP {probe.status_code}: {probe.text}"
+            )
+        log(f"Authenticated against qBittorrent at {QBT_URL} with an API key", "INFO")
+        return
+
     response = session.post(
         f"{QBT_URL}/api/v2/auth/login",
         data={"username": QBT_USERNAME, "password": QBT_PASSWORD},
@@ -340,8 +377,20 @@ def get_permanent_bans() -> List[str]:
 
 
 def should_track_peer(peer: Dict[str, Any]) -> bool:
+    if SLOWBAN_SKIP_COMPLETE_PEERS and float(peer.get("progress", 0) or 0) >= 1:
+        return False
+
     up_speed = int(peer.get("up_speed", 0) or 0)
-    return up_speed > 0 and up_speed < SLOWBAN_MIN_SPEED
+    if up_speed >= SLOWBAN_MIN_SPEED:
+        return False
+
+    return up_speed > 0 or SLOWBAN_INCLUDE_IDLE_PEERS
+
+
+def should_scan_torrent(torrent: Dict[str, Any]) -> bool:
+    if not SLOWBAN_ONLY_FINISHED_TORRENTS:
+        return True
+    return int(torrent.get("amount_left", 0) or 0) == 0
 
 
 def parse_field(field: str, min_v: int, max_v: int) -> Set[int]:
@@ -485,6 +534,14 @@ def main() -> None:
         "INFO",
     )
     log(
+        f"Scope: only_finished_torrents={SLOWBAN_ONLY_FINISHED_TORRENTS}, "
+        f"skip_complete_peers={SLOWBAN_SKIP_COMPLETE_PEERS}, "
+        f"include_idle_peers={SLOWBAN_INCLUDE_IDLE_PEERS}, "
+        f"max_bans_per_poll={SLOWBAN_MAX_BANS_PER_POLL or 'unlimited'}, "
+        f"auth={'api_key' if QBT_API_KEY else 'password'}",
+        "INFO",
+    )
+    log(
         f"Time-sliced file logging enabled: dir={SLOWBAN_LOG_DIR}, rotation=2h, retention_days={SLOWBAN_LOG_RETENTION_DAYS}",
         "INFO",
     )
@@ -510,11 +567,14 @@ def main() -> None:
             torrents = get_torrents()
             active_peer_count = 0
             seen_state_keys: Set[str] = set()
+            bans_this_poll = 0
 
             for torrent in torrents:
                 torrent_hash = torrent.get("hash")
                 torrent_name = torrent.get("name", torrent_hash or "unknown")
                 if not torrent_hash:
+                    continue
+                if not should_scan_torrent(torrent):
                     continue
 
                 peers = get_peers(torrent_hash)
@@ -561,12 +621,28 @@ def main() -> None:
                             state[state_key]["warned"] = True
 
                         if slow_for >= SLOWBAN_THRESHOLD_TIME:
+                            # The ceiling holds the peer's streak rather than
+                            # clearing it, so a peer deferred by the ceiling is
+                            # banned on one of the next polls instead of
+                            # starting its threshold window again.
+                            if (
+                                SLOWBAN_MAX_BANS_PER_POLL > 0
+                                and bans_this_poll >= SLOWBAN_MAX_BANS_PER_POLL
+                            ):
+                                log(
+                                    f"Ban ceiling of {SLOWBAN_MAX_BANS_PER_POLL} per poll reached, "
+                                    f"peer '{peer_address}' on torrent '{torrent_name}' waits for the next poll.",
+                                    "DEBUG",
+                                )
+                                continue
+
                             log(
                                 f"Threshold reached for peer '{peer_address}' on torrent '{torrent_name}' "
                                 f"after {slow_for}s below {SLOWBAN_MIN_SPEED}B/s (current {up_speed}B/s).",
                                 "WARN",
                             )
                             ban_peer(peer_address, torrent_name, state)
+                            bans_this_poll += 1
                             state.pop(state_key, None)
                     else:
                         if state_key in state:
