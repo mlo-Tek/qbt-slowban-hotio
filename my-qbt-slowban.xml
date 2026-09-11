@@ -14,7 +14,7 @@
   <Category>Downloaders:</Category>
   <WebUI />
   <TemplateURL />
-  <Icon />
+  <Icon>https://raw.githubusercontent.com/mlo-Tek/qbt-slowban-hotio/main/assets/qbt-slowban.png</Icon>
   <ExtraParams>--pids-limit 2048</ExtraParams>
   <PostArgs />
   <CPUset />
