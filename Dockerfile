@@ -7,7 +7,8 @@ RUN pip install --no-cache-dir requests
 WORKDIR /app
 
 COPY slowban.py /app/slowban.py
+COPY runner.py /app/runner.py
 
-RUN chmod +x /app/slowban.py
+RUN chmod +x /app/slowban.py /app/runner.py
 
-CMD ["python", "/app/slowban.py"]
+CMD ["python", "/app/runner.py"]
